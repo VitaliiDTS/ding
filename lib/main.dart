@@ -1,5 +1,5 @@
+import 'package:ding/pages/login_page.dart';
 import 'package:flutter/material.dart';
-import 'package:health_point_game/pages/hp_game_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -11,12 +11,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Health Point Game',
+      debugShowCheckedModeBanner: false,
+      title: 'Ding',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+        ),
         useMaterial3: true,
       ),
-      home: const HpGamePage(),
+      home: const LoginPage(),
     );
   }
 }
