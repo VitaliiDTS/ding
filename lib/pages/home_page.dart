@@ -1,13 +1,22 @@
 import 'package:ding/core/app_colors.dart';
 import 'package:ding/core/app_text_styles.dart';
+import 'package:ding/data/models/user_model.dart';
+import 'package:ding/data/repositories/user_repository.dart';
 import 'package:ding/pages/profile_page.dart';
 import 'package:ding/widgets/stat_card.dart';
 import 'package:ding/widgets/table_card.dart';
 import 'package:flutter/material.dart';
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+class HomePage extends StatefulWidget {
+  final UserRepository userRepository;
 
+  const HomePage({required this.userRepository, super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
   static void _emptyAction() {}
 
   static const _newRequests = [
@@ -64,13 +73,28 @@ class HomePage extends StatelessWidget {
     ),
   ];
 
-  void _openProfile(BuildContext context) {
+  UserModel? _currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await widget.userRepository.getCurrentUser();
+    if (!mounted) return;
+    setState(() => _currentUser = user);
+  }
+
+  void _openProfile() {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (context) => const ProfilePage(),
+        builder: (context) =>
+            ProfilePage(userRepository: widget.userRepository),
       ),
-    );
+    ).then((_) => _loadUser());
   }
 
   @override
@@ -79,8 +103,18 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Tables'),
         actions: [
+          if (_currentUser != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Center(
+                child: Text(
+                  _currentUser!.name,
+                  style: AppTextStyles.secondary,
+                ),
+              ),
+            ),
           IconButton(
-            onPressed: () => _openProfile(context),
+            onPressed: _openProfile,
             icon: const Icon(Icons.person_outline),
           ),
         ],

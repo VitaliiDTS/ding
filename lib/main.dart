@@ -1,12 +1,23 @@
+import 'package:ding/data/repositories/local_user_repository.dart';
+import 'package:ding/data/services/shared_prefs_service.dart';
 import 'package:ding/pages/login_page.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    const MyApp(
+      repository: LocalUserRepository(
+        storage: SharedPrefsService(),
+      ),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final LocalUserRepository repository;
+
+  const MyApp({required this.repository, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +30,7 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const LoginPage(),
+      home: LoginPage(userRepository: repository),
     );
   }
 }

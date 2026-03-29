@@ -1,4 +1,7 @@
 import 'package:ding/core/app_text_styles.dart';
+import 'package:ding/data/models/user_model.dart';
+import 'package:ding/data/repositories/user_repository.dart';
+import 'package:ding/domain/validators.dart';
 import 'package:ding/pages/home_page.dart';
 import 'package:ding/widgets/app_password_field.dart';
 import 'package:ding/widgets/app_text_field.dart';
@@ -6,7 +9,9 @@ import 'package:ding/widgets/primary_button.dart';
 import 'package:flutter/material.dart';
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+  final UserRepository userRepository;
+
+  const RegisterPage({required this.userRepository, super.key});
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -18,6 +23,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -28,20 +34,31 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      _nameController.clear();
-      _emailController.clear();
-      _passwordController.clear();
-      _confirmPasswordController.clear();
-      _formKey.currentState!.reset();
-      Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (context) => const HomePage(),
-        ),
-      );
-    }
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final user = UserModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    await widget.userRepository.register(user);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            HomePage(userRepository: widget.userRepository),
+      ),
+      (route) => false,
+    );
   }
 
   @override
@@ -84,12 +101,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     hintText: 'Enter your full name',
                     prefixIcon: Icons.person_outline,
                     controller: _nameController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your full name';
-                      }
-                      return null;
-                    },
+                    validator: Validators.validateName,
                   ),
                   const SizedBox(height: 16),
                   AppTextField(
@@ -98,15 +110,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     prefixIcon: Icons.email_outlined,
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Please enter a valid email';
-                      }
-                      return null;
-                    },
+                    validator: Validators.validateEmail,
                   ),
                   const SizedBox(height: 16),
                   AppPasswordField(
@@ -114,15 +118,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     hintText: 'Create a password',
                     prefixIcon: Icons.lock_outline,
                     controller: _passwordController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a password';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
+                    validator: Validators.validatePassword,
                   ),
                   const SizedBox(height: 16),
                   AppPasswordField(
@@ -130,18 +126,16 @@ class _RegisterPageState extends State<RegisterPage> {
                     hintText: 'Repeat your password',
                     prefixIcon: Icons.lock_outline,
                     controller: _confirmPasswordController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please confirm your password';
-                      }
-                      if (value != _passwordController.text) {
-                        return 'Passwords do not match';
-                      }
-                      return null;
-                    },
+                    validator: (value) => Validators.validateConfirmPassword(
+                      value,
+                      _passwordController.text,
+                    ),
                   ),
                   const SizedBox(height: 24),
-                  PrimaryButton(text: 'Register', onPressed: _submit),
+                  if (_isLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    PrimaryButton(text: 'Register', onPressed: _submit),
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: () => Navigator.pop(context),

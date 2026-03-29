@@ -1,4 +1,6 @@
 import 'package:ding/core/app_text_styles.dart';
+import 'package:ding/data/repositories/user_repository.dart';
+import 'package:ding/domain/validators.dart';
 import 'package:ding/pages/home_page.dart';
 import 'package:ding/pages/register_page.dart';
 import 'package:ding/widgets/app_password_field.dart';
@@ -7,7 +9,9 @@ import 'package:ding/widgets/primary_button.dart';
 import 'package:flutter/material.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final UserRepository userRepository;
+
+  const LoginPage({required this.userRepository, super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -17,6 +21,7 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -25,25 +30,44 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      _emailController.clear();
-      _passwordController.clear();
-      _formKey.currentState!.reset();
-      Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (context) => const HomePage(),
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final user = await widget.userRepository.login(
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid email or password'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
     }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            HomePage(userRepository: widget.userRepository),
+      ),
+    );
   }
 
   void _openRegister() {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (context) => const RegisterPage(),
+        builder: (context) =>
+            RegisterPage(userRepository: widget.userRepository),
       ),
     );
   }
@@ -89,15 +113,7 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: Icons.email_outlined,
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Please enter a valid email';
-                      }
-                      return null;
-                    },
+                    validator: Validators.validateEmail,
                   ),
                   const SizedBox(height: 16),
                   AppPasswordField(
@@ -105,18 +121,13 @@ class _LoginPageState extends State<LoginPage> {
                     hintText: 'Enter your password',
                     prefixIcon: Icons.lock_outline,
                     controller: _passwordController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your password';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
+                    validator: Validators.validatePassword,
                   ),
                   const SizedBox(height: 24),
-                  PrimaryButton(text: 'Sign In', onPressed: _submit),
+                  if (_isLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    PrimaryButton(text: 'Sign In', onPressed: _submit),
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _openRegister,
