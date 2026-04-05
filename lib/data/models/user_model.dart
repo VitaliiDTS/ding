@@ -10,7 +10,7 @@ class UserModel {
     required this.id,
     required this.name,
     required this.email,
-    required this.password,
+    this.password = '',
   });
 
   UserModel copyWith({
@@ -37,7 +37,7 @@ class UserModel {
         id: json['id'] as String,
         name: json['name'] as String,
         email: json['email'] as String,
-        password: json['password'] as String,
+        password: json['password'] as String? ?? '',
       );
 
   String toJsonString() => jsonEncode(toJson());

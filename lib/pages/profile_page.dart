@@ -8,6 +8,7 @@ import 'package:ding/widgets/app_text_field.dart';
 import 'package:ding/widgets/primary_button.dart';
 import 'package:ding/widgets/profile_header.dart';
 import 'package:ding/widgets/profile_info_row.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -22,7 +23,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
+  final _oldPasswordController = TextEditingController();
   final _passwordController = TextEditingController();
 
   UserModel? _user;
@@ -39,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
+    _oldPasswordController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -52,7 +53,6 @@ class _ProfilePageState extends State<ProfilePage> {
       _isLoading = false;
       if (user != null) {
         _nameController.text = user.name;
-        _emailController.text = user.email;
       }
     });
   }
@@ -62,7 +62,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _isEditing = !_isEditing;
       if (!_isEditing && _user != null) {
         _nameController.text = _user!.name;
-        _emailController.text = _user!.email;
+        _oldPasswordController.clear();
         _passwordController.clear();
       }
     });
@@ -73,27 +73,52 @@ class _ProfilePageState extends State<ProfilePage> {
 
     setState(() => _isSaving = true);
 
+    // If the user wants to change the password, re-authenticate first.
+    if (_passwordController.text.isNotEmpty) {
+      final email = _user!.email;
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: _oldPasswordController.text,
+      );
+      try {
+        await FirebaseAuth.instance.currentUser
+            ?.reauthenticateWithCredential(credential);
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        setState(() => _isSaving = false);
+        _showError(e.message ?? 'Current password is incorrect.');
+        return;
+      }
+    }
+
     final updated = _user!.copyWith(
       name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
       password: _passwordController.text.isNotEmpty
           ? _passwordController.text
           : null,
     );
 
-    await widget.userRepository.updateUser(updated);
-
-    if (!mounted) return;
-    setState(() {
-      _user = updated;
-      _isEditing = false;
-      _isSaving = false;
-      _passwordController.clear();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated successfully')),
-    );
+    try {
+      await widget.userRepository.updateUser(updated);
+      if (!mounted) return;
+      setState(() {
+        _user = updated;
+        _isEditing = false;
+        _isSaving = false;
+        _passwordController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully')),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showError(e.message ?? 'Failed to update profile.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showError('Failed to update profile: $e');
+    }
   }
 
   Future<void> _deleteAccount() async {
@@ -123,13 +148,37 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (confirmed != true || !mounted) return;
 
-    await widget.userRepository.deleteUser();
-
-    if (!mounted) return;
-    _navigateToLogin();
+    try {
+      await widget.userRepository.deleteUser();
+      if (!mounted) return;
+      _navigateToLogin();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      _showError(e.message ?? 'Failed to delete account.');
+    }
   }
 
   Future<void> _logOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
     await widget.userRepository.logout();
     if (!mounted) return;
     _navigateToLogin();
@@ -139,19 +188,22 @@ class _ProfilePageState extends State<ProfilePage> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute<void>(
-        builder: (context) =>
-            LoginPage(userRepository: widget.userRepository),
+        builder: (_) => LoginPage(userRepository: widget.userRepository),
       ),
       (route) => false,
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-      ),
+      appBar: AppBar(title: const Text('Profile')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _user == null
@@ -170,10 +222,7 @@ class _ProfilePageState extends State<ProfilePage> {
             key: _formKey,
             child: Column(
               children: [
-                ProfileHeader(
-                  name: _user!.name,
-                  role: 'Waiter',
-                ),
+                ProfileHeader(name: _user!.name, role: 'Waiter'),
                 const SizedBox(height: 32),
                 if (_isEditing) _buildEditForm() else _buildInfoCard(),
                 const SizedBox(height: 24),
@@ -266,19 +315,24 @@ class _ProfilePageState extends State<ProfilePage> {
           validator: Validators.validateName,
         ),
         const SizedBox(height: 16),
-        AppTextField(
-          labelText: 'Email',
-          hintText: 'Enter your email',
-          prefixIcon: Icons.email_outlined,
-          controller: _emailController,
-          keyboardType: TextInputType.emailAddress,
-          validator: Validators.validateEmail,
+        AppPasswordField(
+          labelText: 'Current Password',
+          hintText: 'Required only when changing password',
+          prefixIcon: Icons.lock_outline,
+          controller: _oldPasswordController,
+          validator: (value) {
+            if (_passwordController.text.isEmpty) return null;
+            if (value == null || value.isEmpty) {
+              return 'Enter current password to change it';
+            }
+            return null;
+          },
         ),
         const SizedBox(height: 16),
         AppPasswordField(
           labelText: 'New Password (optional)',
           hintText: 'Leave empty to keep current',
-          prefixIcon: Icons.lock_outline,
+          prefixIcon: Icons.lock_reset_outlined,
           controller: _passwordController,
           validator: (value) {
             if (value == null || value.isEmpty) return null;
