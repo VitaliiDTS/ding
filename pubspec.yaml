@@ -36,6 +36,22 @@ dependencies:
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.2
 
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.0
+
+  # Secure local session storage (replaces plain SharedPreferences for auth state)
+  flutter_secure_storage: ^9.2.2
+
+  # Network connectivity monitoring
+  connectivity_plus: ^6.1.0
+
+  # MQTT device support
+  mqtt_client: ^10.0.0
+
+  # State management for connectivity and MQTT providers
+  provider: ^6.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
