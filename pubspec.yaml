@@ -52,6 +52,12 @@ dependencies:
   # State management for connectivity and MQTT providers
   provider: ^6.1.2
 
+  # Firestore — tables API
+  cloud_firestore: ^5.4.4
+
+  # State management
+  flutter_bloc: ^8.1.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /tables/{tableId} {
+      // Read and delete only own tables (matched by email)
+      allow read, delete: if request.auth != null
+          && request.auth.token.email == resource.data.assignedTo;
+      // Create allowed for any authenticated user
+      allow create: if request.auth != null;
+    }
+  }
+}
