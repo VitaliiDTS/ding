@@ -3,10 +3,13 @@ import 'package:ding/data/models/user_model.dart';
 import 'package:ding/data/repositories/user_repository.dart';
 import 'package:ding/domain/validators.dart';
 import 'package:ding/pages/home_page.dart';
+import 'package:ding/providers/connectivity_provider.dart';
 import 'package:ding/widgets/app_password_field.dart';
 import 'package:ding/widgets/app_text_field.dart';
 import 'package:ding/widgets/primary_button.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class RegisterPage extends StatefulWidget {
   final UserRepository userRepository;
@@ -37,27 +40,57 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Registration requires Firebase — block when offline.
+    final connectivity = context.read<ConnectivityProvider>();
+    if (!connectivity.isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No internet connection. '
+            'Registration requires an active network.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
-    final user = UserModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    try {
+      final user = UserModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    await widget.userRepository.register(user);
+      await widget.userRepository.register(user);
 
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) =>
-            HomePage(userRepository: widget.userRepository),
-      ),
-      (route) => false,
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => HomePage(userRepository: widget.userRepository),
+        ),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showError(e.message ?? 'Registration failed. Please try again.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showError('Registration failed: $e');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
