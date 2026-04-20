@@ -1,6 +1,7 @@
 import 'package:ding/core/app_colors.dart';
+import 'package:ding/cubits/user_cubit.dart';
+import 'package:ding/cubits/user_state.dart';
 import 'package:ding/data/models/user_model.dart';
-import 'package:ding/data/repositories/user_repository.dart';
 import 'package:ding/domain/validators.dart';
 import 'package:ding/pages/login_page.dart';
 import 'package:ding/widgets/app_password_field.dart';
@@ -8,13 +9,11 @@ import 'package:ding/widgets/app_text_field.dart';
 import 'package:ding/widgets/primary_button.dart';
 import 'package:ding/widgets/profile_header.dart';
 import 'package:ding/widgets/profile_info_row.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ProfilePage extends StatefulWidget {
-  final UserRepository userRepository;
-
-  const ProfilePage({required this.userRepository, super.key});
+  const ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -22,197 +21,122 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _oldPasswordController = TextEditingController();
-  final _passwordController = TextEditingController();
-
-  UserModel? _user;
-  bool _isLoading = true;
+  final _nameCtrl = TextEditingController();
+  final _oldPassCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
   bool _isEditing = false;
-  bool _isSaving = false;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    final user = context.read<UserCubit>().state.user;
+    if (user != null) _nameCtrl.text = user.name;
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _oldPasswordController.dispose();
-    _passwordController.dispose();
+    _nameCtrl.dispose();
+    _oldPassCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadUser() async {
-    final user = await widget.userRepository.getCurrentUser();
-    if (!mounted) return;
-    setState(() {
-      _user = user;
-      _isLoading = false;
-      if (user != null) {
-        _nameController.text = user.name;
-      }
-    });
-  }
-
-  void _toggleEdit() {
-    setState(() {
-      _isEditing = !_isEditing;
-      if (!_isEditing && _user != null) {
-        _nameController.text = _user!.name;
-        _oldPasswordController.clear();
-        _passwordController.clear();
-      }
-    });
-  }
-
-  Future<void> _saveChanges() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
-
-    // If the user wants to change the password, re-authenticate first.
-    if (_passwordController.text.isNotEmpty) {
-      final email = _user!.email;
-      final credential = EmailAuthProvider.credential(
-        email: email,
-        password: _oldPasswordController.text,
-      );
-      try {
-        await FirebaseAuth.instance.currentUser
-            ?.reauthenticateWithCredential(credential);
-      } on FirebaseAuthException catch (e) {
-        if (!mounted) return;
-        setState(() => _isSaving = false);
-        _showError(e.message ?? 'Current password is incorrect.');
-        return;
-      }
-    }
-
-    final updated = _user!.copyWith(
-      name: _nameController.text.trim(),
-      password: _passwordController.text.isNotEmpty
-          ? _passwordController.text
-          : null,
-    );
-
-    try {
-      await widget.userRepository.updateUser(updated);
-      if (!mounted) return;
-      setState(() {
-        _user = updated;
-        _isEditing = false;
-        _isSaving = false;
-        _passwordController.clear();
+  void _toggleEdit(UserModel user) => setState(() {
+        _isEditing = !_isEditing;
+        if (!_isEditing) {
+          _nameCtrl.text = user.name;
+          _oldPassCtrl.clear();
+          _passCtrl.clear();
+        }
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
+
+  void _saveChanges(UserModel user) {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    context.read<UserCubit>().updateProfile(
+          user.copyWith(
+            name: _nameCtrl.text.trim(),
+            password:
+                _passCtrl.text.isNotEmpty ? _passCtrl.text : null,
+          ),
+          _oldPassCtrl.text,
+        );
+  }
+
+  Future<void> _confirm(
+    String title,
+    String body,
+    VoidCallback action,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(title),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) action();
+  }
+
+  void _navigateToLogin() => Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+        (r) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _isSaving = false);
-      _showError(e.message ?? 'Failed to update profile.');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSaving = false);
-      _showError('Failed to update profile: $e');
-    }
-  }
-
-  Future<void> _deleteAccount() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete account'),
-        content: const Text(
-          'Are you sure you want to delete your account? '
-          'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await widget.userRepository.deleteUser();
-      if (!mounted) return;
-      _navigateToLogin();
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      _showError(e.message ?? 'Failed to delete account.');
-    }
-  }
-
-  Future<void> _logOut() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Log out'),
-        content: const Text('Are you sure you want to log out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    await widget.userRepository.logout();
-    if (!mounted) return;
-    _navigateToLogin();
-  }
-
-  void _navigateToLogin() {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => LoginPage(userRepository: widget.userRepository),
-      ),
-      (route) => false,
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _user == null
-              ? const Center(child: Text('User not found'))
-              : _buildContent(),
+    return BlocConsumer<UserCubit, UserState>(
+      listenWhen: (p, c) =>
+          (p.isLoading && !c.isLoading) ||
+          (!c.isAuthenticated && p.isAuthenticated) ||
+          (p.errorMessage != c.errorMessage && c.errorMessage != null),
+      listener: (context, state) {
+        if (!state.isAuthenticated) {
+          _navigateToLogin();
+          return;
+        }
+        if (state.errorMessage != null) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        if (!_saving) return;
+        setState(() {
+          _saving = false;
+          _isEditing = false;
+          _passCtrl.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully')),
+        );
+      },
+      builder: (context, state) => Scaffold(
+        appBar: AppBar(title: const Text('Profile')),
+        body: state.user == null
+            ? const Center(child: CircularProgressIndicator())
+            : _buildContent(state.user!),
+      ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(UserModel user) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Center(
@@ -222,27 +146,31 @@ class _ProfilePageState extends State<ProfilePage> {
             key: _formKey,
             child: Column(
               children: [
-                ProfileHeader(name: _user!.name, role: 'Waiter'),
+                ProfileHeader(name: user.name, role: 'Waiter'),
                 const SizedBox(height: 32),
-                if (_isEditing) _buildEditForm() else _buildInfoCard(),
+                if (_isEditing) _buildEditForm() else _buildInfoCard(user),
                 const SizedBox(height: 24),
                 if (_isEditing)
-                  _isSaving
+                  _saving
                       ? const Center(child: CircularProgressIndicator())
                       : PrimaryButton(
                           text: 'Save changes',
-                          onPressed: _saveChanges,
+                          onPressed: () => _saveChanges(user),
                         )
                 else
                   PrimaryButton(
                     text: 'Edit profile',
-                    onPressed: _toggleEdit,
+                    onPressed: () => _toggleEdit(user),
                   ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: _logOut,
+                    onPressed: () => _confirm(
+                      'Log out',
+                      'Are you sure you want to log out?',
+                      () => context.read<UserCubit>().logout(),
+                    ),
                     child: const Text('Log out'),
                   ),
                 ),
@@ -250,9 +178,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 SizedBox(
                   width: double.infinity,
                   child: TextButton(
-                    onPressed: _deleteAccount,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red,
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    onPressed: () => _confirm(
+                      'Delete',
+                      'Are you sure you want to delete your account? '
+                          'This action cannot be undone.',
+                      () => context.read<UserCubit>().deleteAccount(),
                     ),
                     child: const Text('Delete account'),
                   ),
@@ -265,7 +196,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildInfoCard() {
+  Widget _buildInfoCard(UserModel user) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -279,13 +210,13 @@ class _ProfilePageState extends State<ProfilePage> {
           ProfileInfoRow(
             icon: Icons.person_outline,
             title: 'Full name',
-            value: _user!.name,
+            value: user.name,
           ),
           const SizedBox(height: 16),
           ProfileInfoRow(
             icon: Icons.email_outlined,
             title: 'Email',
-            value: _user!.email,
+            value: user.email,
           ),
           const SizedBox(height: 16),
           const ProfileInfoRow(
@@ -311,7 +242,7 @@ class _ProfilePageState extends State<ProfilePage> {
           labelText: 'Full Name',
           hintText: 'Enter your full name',
           prefixIcon: Icons.person_outline,
-          controller: _nameController,
+          controller: _nameCtrl,
           validator: Validators.validateName,
         ),
         const SizedBox(height: 16),
@@ -319,9 +250,9 @@ class _ProfilePageState extends State<ProfilePage> {
           labelText: 'Current Password',
           hintText: 'Required only when changing password',
           prefixIcon: Icons.lock_outline,
-          controller: _oldPasswordController,
+          controller: _oldPassCtrl,
           validator: (value) {
-            if (_passwordController.text.isEmpty) return null;
+            if (_passCtrl.text.isEmpty) return null;
             if (value == null || value.isEmpty) {
               return 'Enter current password to change it';
             }
@@ -333,11 +264,9 @@ class _ProfilePageState extends State<ProfilePage> {
           labelText: 'New Password (optional)',
           hintText: 'Leave empty to keep current',
           prefixIcon: Icons.lock_reset_outlined,
-          controller: _passwordController,
-          validator: (value) {
-            if (value == null || value.isEmpty) return null;
-            return Validators.validatePassword(value);
-          },
+          controller: _passCtrl,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? null : Validators.validatePassword(v),
         ),
       ],
     );

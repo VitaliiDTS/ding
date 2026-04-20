@@ -1,1 +1,25 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"ding-project-c9354","appId":"1:64179232632:android:a582f4702ace6d8a4fb28d","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"ding-project-c9354","configurations":{"android":"1:64179232632:android:a582f4702ace6d8a4fb28d","ios":"1:64179232632:ios:e050b0acf06d980c4fb28d"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "ding-project-c9354",
+          "appId": "1:64179232632:android:a582f4702ace6d8a4fb28d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ding-project-c9354",
+          "configurations": {
+            "android": "1:64179232632:android:a582f4702ace6d8a4fb28d",
+            "ios": "1:64179232632:ios:e050b0acf06d980c4fb28d"
+          }
+        }
+      }
+    }
+  }
+}
