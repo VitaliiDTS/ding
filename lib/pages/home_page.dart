@@ -11,6 +11,7 @@ import 'package:ding/data/models/table_notification.dart';
 import 'package:ding/pages/profile_page.dart';
 import 'package:ding/widgets/stat_card.dart';
 import 'package:ding/widgets/table_card.dart';
+import 'package:flashlight_plugin/flashlight_plugin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -128,10 +129,14 @@ class HomePage extends StatelessWidget {
                           style: AppTextStyles.secondary,
                         ),
                         const SizedBox(height: 24),
-                        const StatCard(
-                          title: 'Free tables',
-                          value: '6',
-                          icon: Icons.table_restaurant_outlined,
+                        GestureDetector(
+                          onLongPress: () =>
+                              FlashlightPlugin.toggle(context),
+                          child: const StatCard(
+                            title: 'Free tables',
+                            value: '6',
+                            icon: Icons.table_restaurant_outlined,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         BlocBuilder<MqttCubit, MqttState>(
